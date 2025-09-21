@@ -37,13 +37,10 @@ export function ChatPage() {
     );
   }, [thread.isLoading, liveMessages, activeConversationId, conversationHistory]);
 
-  const messagesToRender = viewingHistoryConversation
-    ? viewingHistoryConversation.messages
-    : liveMessages;
+  const messagesToRender =
+    viewingHistoryConversation?.messages ?? liveMessages ?? [];
 
-  const historicalActivityMap = viewingHistoryConversation
-    ? viewingHistoryConversation.activities
-    : historicalActivities;
+  const historicalActivityMap = viewingHistoryConversation?.activities ?? historicalActivities;
 
   const liveEvents =
     viewingHistoryConversation || liveMessages.length === 0
@@ -86,7 +83,7 @@ export function ChatPage() {
   };
 
   const hasAnyConversation =
-    liveMessages.length > 0 || conversationHistory.length > 0;
+    (liveMessages?.length ?? 0) > 0 || conversationHistory.length > 0;
 
   return (
     <div className="flex h-full w-full gap-6">
