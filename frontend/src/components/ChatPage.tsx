@@ -1,181 +1,185 @@
-import { useStream } from "@langchain/langgraph-sdk/react";
-import type { Message } from "@langchain/langgraph-sdk";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
-import { ProcessedEvent } from "@/components/ActivityTimeline";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { ChatMessagesView } from "@/components/ChatMessagesView";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useChatContext } from "@/contexts/ChatContext";
 
 export function ChatPage() {
-  const [processedEventsTimeline, setProcessedEventsTimeline] = useState<
-    ProcessedEvent[]
-  >([]);
-  const [historicalActivities, setHistoricalActivities] = useState<
-    Record<string, ProcessedEvent[]>
-  >({});
+  const {
+    thread,
+    processedEventsTimeline,
+    historicalActivities,
+    error,
+    handleSubmit,
+    handleCancel,
+    conversationHistory,
+    activeConversationId,
+    selectConversation,
+  } = useChatContext();
+
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const hasFinalizeEventOccurredRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
-  const thread = useStream<{
-    messages: Message[];
-    initial_search_query_count: number;
-    max_research_loops: number;
-    reasoning_model: string;
-  }>({
-    apiUrl: import.meta.env.DEV
-      ? "http://localhost:2024"
-      : "http://localhost:8123",
-    assistantId: "agent",
-    messagesKey: "messages",
-    onUpdateEvent: (event: any) => {
-      let processedEvent: ProcessedEvent | null = null;
-      if (event.generate_query) {
-        processedEvent = {
-          title: "Generating Search Queries",
-          data: event.generate_query?.search_query?.join(", ") || "",
-        };
-      } else if (event.web_research) {
-        const sources = event.web_research.sources_gathered || [];
-        const numSources = sources.length;
-        const uniqueLabels = [
-          ...new Set(sources.map((s: any) => s.label).filter(Boolean)),
-        ];
-        const exampleLabels = uniqueLabels.slice(0, 3).join(", ");
-        processedEvent = {
-          title: "Web Research",
-          data: `Gathered ${numSources} sources. Related to: ${
-            exampleLabels || "N/A"
-          }.`,
-        };
-      } else if (event.reflection) {
-        processedEvent = {
-          title: "Reflection",
-          data: "Analysing Web Research Results",
-        };
-      } else if (event.finalize_answer) {
-        processedEvent = {
-          title: "Finalizing Answer",
-          data: "Composing and presenting the final answer.",
-        };
-        hasFinalizeEventOccurredRef.current = true;
-      }
-      if (processedEvent) {
-        setProcessedEventsTimeline((prevEvents) => [
-          ...prevEvents,
-          processedEvent!,
-        ]);
-      }
-    },
-    onError: (error: any) => {
-      setError(error.message);
-    },
-  });
+
+  const viewingHistoryConversation = useMemo(() => {
+    if (thread.messages.length > 0) {
+      return null;
+    }
+    if (!activeConversationId) {
+      return null;
+    }
+    return conversationHistory.find(
+      (conversation) => conversation.id === activeConversationId
+    ) || null;
+  }, [thread.messages, activeConversationId, conversationHistory]);
+
+  const messagesToRender = viewingHistoryConversation
+    ? viewingHistoryConversation.messages
+    : thread.messages;
+
+  const historicalActivityMap = viewingHistoryConversation
+    ? viewingHistoryConversation.activities
+    : historicalActivities;
+
+  const liveEvents = viewingHistoryConversation ? [] : processedEventsTimeline;
+  const isLoading = viewingHistoryConversation ? false : thread.isLoading;
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-      const scrollViewport = scrollAreaRef.current.querySelector(
+      const viewport = scrollAreaRef.current.querySelector(
         "[data-radix-scroll-area-viewport]"
       );
-      if (scrollViewport) {
-        scrollViewport.scrollTop = scrollViewport.scrollHeight;
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
       }
     }
-  }, [thread.messages]);
+  }, [messagesToRender]);
 
-  useEffect(() => {
-    if (
-      hasFinalizeEventOccurredRef.current &&
-      !thread.isLoading &&
-      thread.messages.length > 0
-    ) {
-      const lastMessage = thread.messages[thread.messages.length - 1];
-      if (lastMessage && lastMessage.type === "ai" && lastMessage.id) {
-        setHistoricalActivities((prev) => ({
-          ...prev,
-          [lastMessage.id!]: [...processedEventsTimeline],
-        }));
-      }
-      hasFinalizeEventOccurredRef.current = false;
-    }
-  }, [thread.messages, thread.isLoading, processedEventsTimeline]);
+  const handleStartNewConversation = () => {
+    selectConversation(null);
+    handleCancel();
+  };
 
-  const handleSubmit = useCallback(
-    (submittedInputValue: string, effort: string, model: string) => {
-      if (!submittedInputValue.trim()) return;
-      setProcessedEventsTimeline([]);
-      hasFinalizeEventOccurredRef.current = false;
+  const formatUpdatedTime = (iso: string) => {
+    const deltaMs = Date.now() - new Date(iso).getTime();
+    const seconds = Math.floor(deltaMs / 1000);
+    if (seconds < 60) return "刚刚";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} 分钟前`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} 小时前`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} 天前`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks} 周前`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} 个月前`;
+    const years = Math.floor(days / 365);
+    return `${years} 年前`;
+  };
 
-      let initial_search_query_count = 0;
-      let max_research_loops = 0;
-      switch (effort) {
-        case "low":
-          initial_search_query_count = 1;
-          max_research_loops = 1;
-          break;
-        case "medium":
-          initial_search_query_count = 3;
-          max_research_loops = 3;
-          break;
-        case "high":
-          initial_search_query_count = 5;
-          max_research_loops = 10;
-          break;
-      }
-
-      const newMessages: Message[] = [
-        ...(thread.messages || []),
-        {
-          type: "human",
-          content: submittedInputValue,
-          id: Date.now().toString(),
-        },
-      ];
-      thread.submit({
-        messages: newMessages,
-        initial_search_query_count: initial_search_query_count,
-        max_research_loops: max_research_loops,
-        reasoning_model: model,
-      });
-    },
-    [thread]
-  );
-
-  const handleCancel = useCallback(() => {
-    thread.stop();
-    window.location.reload();
-  }, [thread]);
+  const hasAnyConversation =
+    messagesToRender.length > 0 || conversationHistory.length > 0;
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1">
-      {thread.messages.length === 0 ? (
-        <WelcomeScreen
-          handleSubmit={handleSubmit}
-          isLoading={thread.isLoading}
-          onCancel={handleCancel}
-        />
-      ) : error ? (
-        <div className="flex flex-1 flex-col items-center justify-center">
-          <div className="flex flex-col items-center justify-center gap-4">
-            <h1 className="text-2xl font-bold text-red-400">Error</h1>
-            <p className="text-red-400">{JSON.stringify(error)}</p>
-
-            <Button variant="destructive" onClick={() => window.location.reload()}>
-              Retry
+    <div className="flex h-full w-full gap-6">
+      <aside className="hidden w-72 shrink-0 flex-col rounded-xl border border-white/10 bg-neutral-900/60 p-4 md:flex">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-neutral-200">
+            历史对话
+          </h2>
+          {conversationHistory.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs text-neutral-400 hover:text-white"
+              onClick={() => selectConversation(null)}
+            >
+              清除选择
             </Button>
-          </div>
+          )}
         </div>
-      ) : (
-        <ChatMessagesView
-          messages={thread.messages}
-          isLoading={thread.isLoading}
-          scrollAreaRef={scrollAreaRef}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          liveActivityEvents={processedEventsTimeline}
-          historicalActivities={historicalActivities}
-        />
-      )}
+        <Button
+          className="mt-3 w-full justify-start bg-blue-500/10 text-blue-200 hover:bg-blue-500/20"
+          variant="secondary"
+          onClick={handleStartNewConversation}
+        >
+          新建对话
+        </Button>
+        <ScrollArea className="mt-4 flex-1">
+          <div className="space-y-2">
+            {conversationHistory.length === 0 && (
+              <p className="text-sm text-neutral-500">
+                暂无历史对话，先发起一次提问吧。
+              </p>
+            )}
+            {conversationHistory.map((conversation) => {
+              const isActive = conversation.id === activeConversationId;
+              return (
+                <button
+                  key={conversation.id}
+                  onClick={() => selectConversation(conversation.id)}
+                  className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                    isActive
+                      ? "border-blue-400 bg-blue-500/10 text-blue-100"
+                      : "border-white/10 bg-neutral-900/40 text-neutral-200 hover:border-white/20 hover:bg-neutral-800/60"
+                  }`}
+                >
+                  <div className="truncate text-sm font-medium">
+                    {conversation.title || "未命名对话"}
+                  </div>
+                  <div className="mt-1 text-xs text-neutral-400">
+                    {formatUpdatedTime(conversation.updatedAt)}
+                  </div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {conversation.messages.filter((msg) => msg.type === "human").length}
+                    次提问 · {conversation.messages.length} 条消息
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </aside>
+
+      <div className="flex flex-1 flex-col">
+        {messagesToRender.length === 0 && !isLoading && !viewingHistoryConversation ? (
+          <WelcomeScreen
+            handleSubmit={handleSubmit}
+            isLoading={isLoading}
+            onCancel={handleCancel}
+          />
+        ) : error ? (
+          <div className="flex flex-1 flex-col items-center justify-center">
+            <div className="flex flex-col items-center justify-center gap-4">
+              <h1 className="text-2xl font-bold text-red-400">Error</h1>
+              <p className="text-red-400">{JSON.stringify(error)}</p>
+
+              <Button variant="destructive" onClick={handleStartNewConversation}>
+                重试
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <ChatMessagesView
+            messages={messagesToRender}
+            isLoading={isLoading}
+            scrollAreaRef={scrollAreaRef}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            liveActivityEvents={liveEvents}
+            historicalActivities={historicalActivityMap}
+            isHistoryView={Boolean(viewingHistoryConversation)}
+            onStartNewConversation={handleStartNewConversation}
+          />
+        )}
+
+        {!hasAnyConversation && viewingHistoryConversation && (
+          <div className="mt-6 text-center text-sm text-neutral-500">
+            当前显示的是历史记录，如需继续交流，请选择“新建对话”。
+          </div>
+        )}
+      </div>
     </div>
   );
 }

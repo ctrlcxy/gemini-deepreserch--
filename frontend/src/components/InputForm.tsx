@@ -16,6 +16,8 @@ interface InputFormProps {
   onCancel: () => void;
   isLoading: boolean;
   hasHistory: boolean;
+  isDisabled?: boolean;
+  onStartNewConversation?: () => void;
 }
 
 export const InputForm: React.FC<InputFormProps> = ({
@@ -23,6 +25,8 @@ export const InputForm: React.FC<InputFormProps> = ({
   onCancel,
   isLoading,
   hasHistory,
+  isDisabled = false,
+  onStartNewConversation,
 }) => {
   const [internalInputValue, setInternalInputValue] = useState("");
   const [effort, setEffort] = useState("medium");
@@ -30,7 +34,7 @@ export const InputForm: React.FC<InputFormProps> = ({
 
   const handleInternalSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!internalInputValue.trim()) return;
+    if (isDisabled || !internalInputValue.trim()) return;
     onSubmit(internalInputValue, effort, model);
     setInternalInputValue("");
   };
@@ -63,6 +67,7 @@ export const InputForm: React.FC<InputFormProps> = ({
           className={`w-full text-neutral-100 placeholder-neutral-500 resize-none border-0 focus:outline-none focus:ring-0 outline-none focus-visible:ring-0 shadow-none
                         md:text-base  min-h-[56px] max-h-[200px]`}
           rows={1}
+          disabled={isDisabled}
         />
         <div className="-mt-3">
           {isLoading ? (
@@ -72,7 +77,7 @@ export const InputForm: React.FC<InputFormProps> = ({
               size="icon"
               className="text-red-500 hover:text-red-400 hover:bg-red-500/10 p-2 cursor-pointer rounded-full transition-all duration-200"
               onClick={onCancel}
-            >
+              >
               <StopCircle className="h-5 w-5" />
             </Button>
           ) : (
@@ -84,7 +89,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                   ? "text-neutral-500"
                   : "text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
               } p-2 cursor-pointer rounded-full transition-all duration-200 text-base`}
-              disabled={isSubmitDisabled}
+              disabled={isDisabled || isSubmitDisabled}
             >
               Search
               <Send className="h-5 w-5" />
@@ -167,7 +172,8 @@ export const InputForm: React.FC<InputFormProps> = ({
           <Button
             className="bg-neutral-700 border-neutral-600 text-neutral-300 cursor-pointer rounded-xl rounded-t-sm pl-2 "
             variant="default"
-            onClick={() => window.location.reload()}
+            onClick={onStartNewConversation}
+            disabled={isLoading}
           >
             <SquarePen size={16} />
             New Search

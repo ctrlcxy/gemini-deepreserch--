@@ -230,6 +230,8 @@ interface ChatMessagesViewProps {
   onCancel: () => void;
   liveActivityEvents: ProcessedEvent[];
   historicalActivities: Record<string, ProcessedEvent[]>;
+  isHistoryView?: boolean;
+  onStartNewConversation?: () => void;
 }
 
 export function ChatMessagesView({
@@ -240,6 +242,8 @@ export function ChatMessagesView({
   onCancel,
   liveActivityEvents,
   historicalActivities,
+  isHistoryView = false,
+  onStartNewConversation,
 }: ChatMessagesViewProps) {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
@@ -286,7 +290,8 @@ export function ChatMessagesView({
               </div>
             );
           })}
-          {isLoading &&
+          {!isHistoryView &&
+            isLoading &&
             (messages.length === 0 ||
               messages[messages.length - 1].type === "human") && (
               <div className="flex items-start gap-3 mt-3">
@@ -316,6 +321,8 @@ export function ChatMessagesView({
         isLoading={isLoading}
         onCancel={onCancel}
         hasHistory={messages.length > 0}
+        isDisabled={isHistoryView}
+        onStartNewConversation={onStartNewConversation}
       />
     </div>
   );
