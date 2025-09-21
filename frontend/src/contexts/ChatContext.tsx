@@ -29,6 +29,8 @@ interface ChatContextValue {
   error: string | null;
   handleSubmit: (input: string, effort: string, model: string) => void;
   handleCancel: () => void;
+  startNewConversation: () => void;
+  liveMessages: Message[];
   conversationHistory: ConversationSnapshot[];
   activeConversationId: string | null;
   selectConversation: (conversationId: string | null) => void;
@@ -125,6 +127,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
     Record<string, ProcessedEvent[]>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [liveMessages, setLiveMessages] = useState<Message[]>([]);
   const [conversationHistory, setConversationHistory] = useState<
     ConversationSnapshot[]
   >(() => readHistoryFromStorage());
@@ -134,6 +137,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
 
   const hasFinalizeEventOccurredRef = useRef(false);
   const sessionIdRef = useRef<string | null>(readActiveSession());
+  const isResettingRef = useRef(false);
 
   const thread = useStream<MessageState>({
     apiUrl: import.meta.env.DEV
@@ -186,6 +190,13 @@ export function ChatProvider({ children }: PropsWithChildren) {
   });
 
   useEffect(() => {
+    if (isResettingRef.current) {
+      return;
+    }
+    setLiveMessages(thread.messages);
+  }, [thread.messages]);
+
+  useEffect(() => {
     writeHistoryToStorage(conversationHistory);
   }, [conversationHistory]);
 
@@ -197,15 +208,15 @@ export function ChatProvider({ children }: PropsWithChildren) {
     if (
       hasFinalizeEventOccurredRef.current &&
       !thread.isLoading &&
-      thread.messages.length > 0
+      liveMessages.length > 0
     ) {
-      const lastMessage = thread.messages[thread.messages.length - 1];
+      const lastMessage = liveMessages[liveMessages.length - 1];
       if (lastMessage && lastMessage.type === "ai") {
         const sessionId = sessionIdRef.current ?? generateSessionId();
         sessionIdRef.current = sessionId;
         writeActiveSession(sessionId);
 
-        const firstHuman = thread.messages.find((msg) => msg.type === "human");
+        const firstHuman = liveMessages.find((msg) => msg.type === "human");
         const activitiesSnapshot: Record<string, ProcessedEvent[]> = {
           ...historicalActivities,
         };
@@ -221,7 +232,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
               : "未命名对话",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          messages: thread.messages.map((message) => ({ ...message })),
+          messages: liveMessages.map((message) => ({ ...message })),
           activities: activitiesSnapshot,
         };
 
@@ -243,7 +254,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
     }
   }, [
     thread.isLoading,
-    thread.messages,
+    liveMessages,
     historicalActivities,
     processedEventsTimeline,
   ]);
@@ -252,9 +263,9 @@ export function ChatProvider({ children }: PropsWithChildren) {
     if (
       hasFinalizeEventOccurredRef.current &&
       !thread.isLoading &&
-      thread.messages.length > 0
+      liveMessages.length > 0
     ) {
-      const lastMessage = thread.messages[thread.messages.length - 1];
+      const lastMessage = liveMessages[liveMessages.length - 1];
       if (
         lastMessage &&
         lastMessage.type === "ai" &&
@@ -268,7 +279,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
       }
       setProcessedEventsTimeline([]);
     }
-  }, [thread.isLoading, thread.messages, processedEventsTimeline]);
+  }, [thread.isLoading, liveMessages, processedEventsTimeline]);
 
   const handleSubmit = useCallback(
     (submittedInputValue: string, effort: string, model: string) => {
@@ -276,7 +287,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
       setProcessedEventsTimeline([]);
       hasFinalizeEventOccurredRef.current = false;
 
-      if (thread.messages.length === 0) {
+      if (liveMessages.length === 0) {
         setHistoricalActivities({});
       }
 
@@ -304,14 +315,18 @@ export function ChatProvider({ children }: PropsWithChildren) {
           break;
       }
 
+      isResettingRef.current = false;
+
       const newMessages: Message[] = [
-        ...(thread.messages || []),
+        ...liveMessages,
         {
           type: "human",
           content: submittedInputValue,
           id: Date.now().toString(),
         },
       ];
+
+      setLiveMessages(newMessages);
 
       thread.submit({
         messages: newMessages,
@@ -320,7 +335,7 @@ export function ChatProvider({ children }: PropsWithChildren) {
         reasoning_model: model,
       });
     },
-    [thread]
+    [thread, liveMessages]
   );
 
   const handleCancel = useCallback(() => {
@@ -329,7 +344,18 @@ export function ChatProvider({ children }: PropsWithChildren) {
     writeActiveSession(null);
     setProcessedEventsTimeline([]);
     setHistoricalActivities({});
-    setActiveConversationId(null);
+  }, [thread]);
+
+  const startNewConversation = useCallback(() => {
+    thread.stop();
+    isResettingRef.current = true;
+    const newSessionId = generateSessionId();
+    sessionIdRef.current = newSessionId;
+    writeActiveSession(sessionIdRef.current);
+    setProcessedEventsTimeline([]);
+    setHistoricalActivities({});
+    setLiveMessages([]);
+    setActiveConversationId(newSessionId);
   }, [thread]);
 
   const selectConversation = useCallback((conversationId: string | null) => {
@@ -348,6 +374,8 @@ export function ChatProvider({ children }: PropsWithChildren) {
       error,
       handleSubmit,
       handleCancel,
+      startNewConversation,
+      liveMessages,
       conversationHistory,
       activeConversationId,
       selectConversation,
@@ -359,6 +387,8 @@ export function ChatProvider({ children }: PropsWithChildren) {
       error,
       handleSubmit,
       handleCancel,
+      startNewConversation,
+      liveMessages,
       conversationHistory,
       activeConversationId,
       selectConversation,

@@ -14,6 +14,8 @@ export function ChatPage() {
     error,
     handleSubmit,
     handleCancel,
+    startNewConversation,
+    liveMessages,
     conversationHistory,
     activeConversationId,
     selectConversation,
@@ -22,26 +24,31 @@ export function ChatPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const viewingHistoryConversation = useMemo(() => {
-    if (thread.messages.length > 0) {
+    if (thread.isLoading || liveMessages.length > 0) {
       return null;
     }
     if (!activeConversationId) {
       return null;
     }
-    return conversationHistory.find(
-      (conversation) => conversation.id === activeConversationId
-    ) || null;
-  }, [thread.messages, activeConversationId, conversationHistory]);
+    return (
+      conversationHistory.find(
+        (conversation) => conversation.id === activeConversationId
+      ) || null
+    );
+  }, [thread.isLoading, liveMessages, activeConversationId, conversationHistory]);
 
   const messagesToRender = viewingHistoryConversation
     ? viewingHistoryConversation.messages
-    : thread.messages;
+    : liveMessages;
 
   const historicalActivityMap = viewingHistoryConversation
     ? viewingHistoryConversation.activities
     : historicalActivities;
 
-  const liveEvents = viewingHistoryConversation ? [] : processedEventsTimeline;
+  const liveEvents =
+    viewingHistoryConversation || liveMessages.length === 0
+      ? []
+      : processedEventsTimeline;
   const isLoading = viewingHistoryConversation ? false : thread.isLoading;
 
   useEffect(() => {
@@ -57,7 +64,7 @@ export function ChatPage() {
 
   const handleStartNewConversation = () => {
     selectConversation(null);
-    handleCancel();
+    startNewConversation();
   };
 
   const formatUpdatedTime = (iso: string) => {
@@ -79,7 +86,7 @@ export function ChatPage() {
   };
 
   const hasAnyConversation =
-    messagesToRender.length > 0 || conversationHistory.length > 0;
+    liveMessages.length > 0 || conversationHistory.length > 0;
 
   return (
     <div className="flex h-full w-full gap-6">

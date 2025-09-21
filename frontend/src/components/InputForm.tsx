@@ -70,17 +70,17 @@ export const InputForm: React.FC<InputFormProps> = ({
           disabled={isDisabled}
         />
         <div className="-mt-3">
-          {isLoading ? (
+          {isLoading && !isDisabled ? (
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="text-red-500 hover:text-red-400 hover:bg-red-500/10 p-2 cursor-pointer rounded-full transition-all duration-200"
               onClick={onCancel}
-              >
+            >
               <StopCircle className="h-5 w-5" />
             </Button>
-          ) : (
+          ) : !isDisabled ? (
             <Button
               type="submit"
               variant="ghost"
@@ -94,7 +94,7 @@ export const InputForm: React.FC<InputFormProps> = ({
               Search
               <Send className="h-5 w-5" />
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
       <div className="flex items-center justify-between">
