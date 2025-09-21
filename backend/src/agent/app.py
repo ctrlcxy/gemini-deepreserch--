@@ -1,6 +1,7 @@
 # mypy: disable - error - code = "no-untyped-def,misc"
 import pathlib
 from fastapi import FastAPI, Response
+from fastapi.responses import RedirectResponse
 
 from agent.key_manager import get_key_manager
 from fastapi.staticfiles import StaticFiles
@@ -58,3 +59,10 @@ def list_gemini_key_statuses():
         "available": manager.available_key_count(),
         "total": len(statuses),
     }
+
+
+@app.get("/")
+async def redirect_root() -> RedirectResponse:
+    """Redirect bare root requests to the mounted frontend."""
+
+    return RedirectResponse(url="/app/")
